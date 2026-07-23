@@ -223,6 +223,10 @@
       <select id="disposition" required></select>
     </div>
     <div class="row">
+      <label for="callType" class="req">Anruftyp</label>
+      <select id="callType" required></select>
+    </div>
+    <div class="row">
       <label for="sdrNote">Kurznotiz (optional)</label>
       <textarea id="sdrNote" rows="3" placeholder="Stichworte, die die KI-Zusammenfassung ergänzen …"></textarea>
     </div>
@@ -308,6 +312,22 @@
       if(d.label==="Kontakt aufgenommen") o.selected=true;
       sel.appendChild(o);
     });
+  })();
+
+  // ---------- Anruftyp befüllen (Default = Erstgespräch Outbound) ----------
+  var CALLTYPES = [
+    "Erstgespräch Outbound (Telesales/Cold)",
+    "Erstgespräch Inbound (Lead/MQL)",
+    "Lösungspitch / Demo",
+    "Technisches Discovery / Workshop",
+    "Angebots-/Offertbesprechung",
+    "Upsell-/Cross-Sell-Gespräch",
+    "Strategie- / Roadmap-Workshop",
+    "Vertragsverhandlung / Abschlussmeeting"
+  ];
+  (function(){
+    var sel=$("callType");
+    CALLTYPES.forEach(function(t,i){ var o=document.createElement("option"); o.value=t; o.textContent=t; if(i===0) o.selected=true; sel.appendChild(o); });
   })();
 
   // ---------- Zugriff prüfen + Owner laden ----------
@@ -524,6 +544,7 @@
     fd.append("direction", "OUTBOUND");
     fd.append("disposition", disp);
     fd.append("dispositionLabel", $("disposition").selectedOptions[0].textContent);
+    fd.append("callType", $("callType").value);
     fd.append("startTimeMs", String(startMs));
     fd.append("durationMs", String(durMs));
     fd.append("sdrNote", $("sdrNote").value.trim());
@@ -573,7 +594,27 @@
     $("contactLink").style.display="none";
     $("result").classList.add("show"); window.scrollTo(0,0);
   }
-  $("again").addEventListener("click", function(){ location.reload(); });
+  $("again").addEventListener("click", function(){ softReset(); });
+  function softReset(){
+    // Naechster Anruf: Owner ("Wer bin ich") UND aktive Liste behalten, Rest zuruecksetzen.
+    contact=null; recBlob=null; chunks=[]; startMs=0; endMs=0;
+    stopAllTracks(); if(timerInt){ clearInterval(timerInt); }
+    ["result","cardPost","cardRec","contactCard"].forEach(function(id){ $(id).classList.remove("show"); });
+    ["postErr","pickErr","recWarn"].forEach(function(id){ $(id).classList.remove("show"); });
+    $("sdrNote").value=""; $("disposition").selectedIndex=0; $("callType").selectedIndex=0;
+    $("contactLink").style.display=""; $("btnSubmit").disabled=false;
+    cs.value=""; cr.classList.remove("show"); cr.innerHTML="";
+    $("cardPick").style.display=""; $("sourceRow").style.display="";
+    // Modus behalten: war eine Worklist aktiv, gleich wieder laden; sonst Suche.
+    if(mode==="mql" || mode==="sql"){
+      $("searchRow").style.display="none"; $("worklistRow").style.display="";
+      loadWorklist(mode);
+    } else {
+      mode="search";
+      Array.prototype.forEach.call(document.querySelectorAll(".tab"), function(x){ if(x.dataset.mode==="search"){ x.classList.add("active"); } else { x.classList.remove("active"); } });
+      $("searchRow").style.display=""; $("worklistRow").style.display="none"; cs.focus();
+    }
+  }
   function addKv(box,k,v){ var d=document.createElement("div"); d.innerHTML="<b>"+esc(k)+"</b> "+esc(v); box.appendChild(d); }
 })();
 </script>
