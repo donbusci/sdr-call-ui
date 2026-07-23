@@ -68,6 +68,12 @@
   .worklist .item .ns{color:var(--blau); font-size:12px}
   .worklist .empty{padding:12px; color:var(--grau); font-size:13px}
   .wlcount{color:var(--grau); font-size:12px; margin-bottom:6px}
+  /* Mikrofon-Auswahl + Pegel */
+  .microw{display:flex; align-items:center; gap:10px; margin-top:8px}
+  .micbtn{padding:8px 12px; border:1px solid var(--rand); border-radius:8px; background:var(--weiss); font-size:14px; font-weight:600; cursor:pointer; flex:0 0 auto}
+  .micbtn:hover{background:#fff8e9; border-color:var(--gelb)}
+  .meter{flex:1; height:10px; background:var(--hellgrau); border-radius:6px; overflow:hidden}
+  .meterfill{height:100%; width:0%; background:var(--gruen); transition:width .06s linear}
   /* Kontakt-Karte */
   .contact{display:none}
   .contact.show{display:block}
@@ -162,6 +168,16 @@
         <option value="" disabled selected>Bitte wählen …</option>
         <!--OWNER_OPTIONS-->
       </select>
+    </div>
+
+    <div class="row">
+      <label for="micSelect">Mikrofon (deine Stimme)</label>
+      <select id="micSelect"></select>
+      <div class="microw">
+        <button type="button" class="micbtn" id="micTest">🎤 Test</button>
+        <div class="meter" title="Eingangspegel"><div class="meterfill" id="micLevel"></div></div>
+      </div>
+      <div class="hint">Wähle dein Headset-Mikro und prüfe mit „Test" den Pegel. Die Gegenseite kommt über „Systemaudio teilen" (Windows-Standard-Ausgabegerät).</div>
     </div>
 
     <div class="row" id="sourceRow">
@@ -349,6 +365,62 @@
       .catch(function(){ showAccessError("Kein Zugriff — Link oder Schlüssel ungültig."); });
   })();
 
+  // ---------- Mikrofon-Auswahl + Pegel-Test ----------
+  var selMicId = "";
+  try { selMicId = localStorage.getItem("sdrMicId") || ""; } catch(e){}
+  var testStream=null, testCtx=null, testRAF=null;
+  function getMic(){
+    var c = selMicId ? { audio:{ deviceId:{ exact:selMicId } }, video:false } : { audio:true, video:false };
+    return navigator.mediaDevices.getUserMedia(c).catch(function(err){
+      if(selMicId){ selMicId=""; return navigator.mediaDevices.getUserMedia({ audio:true, video:false }); } // Fallback: Standard-Mikro
+      throw err;
+    });
+  }
+  function fillMics(){
+    return navigator.mediaDevices.enumerateDevices().then(function(devs){
+      var mics = devs.filter(function(d){ return d.kind==="audioinput"; });
+      var sel=$("micSelect"); sel.innerHTML="";
+      var def=document.createElement("option"); def.value=""; def.textContent="Standard-Mikrofon"; sel.appendChild(def);
+      mics.forEach(function(d,i){
+        var o=document.createElement("option"); o.value=d.deviceId;
+        o.textContent=d.label || ("Mikrofon "+(i+1));
+        if(d.deviceId && d.deviceId===selMicId) o.selected=true;
+        sel.appendChild(o);
+      });
+      if(selMicId && !mics.some(function(d){ return d.deviceId===selMicId; })){ selMicId=""; sel.value=""; }
+    }).catch(function(){});
+  }
+  function stopMicTest(){
+    if(testRAF){ cancelAnimationFrame(testRAF); testRAF=null; }
+    if(testCtx && testCtx.state!=="closed"){ try{ testCtx.close(); }catch(e){} } testCtx=null;
+    if(testStream){ testStream.getTracks().forEach(function(t){ t.stop(); }); testStream=null; }
+    $("micTest").textContent="🎤 Test"; $("micLevel").style.width="0%";
+  }
+  function startMicTest(){
+    stopMicTest();
+    getMic().then(function(stream){
+      testStream=stream;
+      fillMics(); // Labels sind jetzt (nach Permission) verfügbar
+      var AC=window.AudioContext||window.webkitAudioContext; testCtx=new AC();
+      var an=testCtx.createAnalyser(); an.fftSize=512;
+      testCtx.createMediaStreamSource(stream).connect(an);
+      var data=new Uint8Array(an.frequencyBinCount);
+      $("micTest").textContent="⏹ Stop";
+      (function loop(){
+        an.getByteTimeDomainData(data);
+        var peak=0; for(var i=0;i<data.length;i++){ var v=Math.abs(data[i]-128); if(v>peak) peak=v; }
+        $("micLevel").style.width=Math.min(100, Math.round(peak/128*160))+"%";
+        testRAF=requestAnimationFrame(loop);
+      })();
+    }).catch(function(err){ alert("Mikrofon-Test nicht möglich ("+(err&&err.name||"Fehler")+")."); });
+  }
+  $("micSelect").addEventListener("change", function(){
+    selMicId=this.value; try{ localStorage.setItem("sdrMicId", selMicId); }catch(e){}
+    if(testStream){ startMicTest(); } // Test auf neuem Gerät neu starten
+  });
+  $("micTest").addEventListener("click", function(){ if(testStream){ stopMicTest(); } else { startMicTest(); } });
+  fillMics(); // initial listen (Labels evtl. leer bis zur ersten Permission)
+
   // ---------- Kontakt-Suche ----------
   var contact=null, dbTimer=null;
   var cs=$("contactSearch"), cr=$("contactResults");
@@ -470,12 +542,13 @@
 
   function startCallAndRecord(){
     $("recWarn").classList.remove("show");
+    stopMicTest(); // laufenden Pegel-Test/Device freigeben
     // 1) Systemton via Display-Capture ZUERST (braucht frische Nutzer-Geste)
     navigator.mediaDevices.getDisplayMedia({ video:true, audio:true })
       .then(function(sys){ sysStream=sys; }, function(){ sysStream=null; /* Nutzer bricht Systemton ab → nur Mikro */ })
       .then(function(){
-        // 2) Mikrofon
-        return navigator.mediaDevices.getUserMedia({ audio:true, video:false });
+        // 2) Mikrofon (gewähltes Gerät, sonst Standard; Fallback in getMic)
+        return getMic();
       })
       .then(function(mic){
         micStream=mic;
