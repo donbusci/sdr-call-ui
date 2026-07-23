@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anruf protokollieren · achermann</title>
+<style>
+  :root{
+    --gelb:#f9b119; --grau:#6b6c6c; --schwarz:#1a1a1a; --weiss:#ffffff;
+    --hellgrau:#f4f4f4; --rand:#d9d9d9; --gruen:#2e7d32; --rot:#c0392b; --blau:#2565c7;
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--hellgrau); color:var(--schwarz); line-height:1.5;
+  }
+  .wrap{max-width:680px; margin:0 auto; padding:24px 16px 64px}
+  header.brand{display:flex; align-items:center; gap:12px; margin-bottom:8px}
+  .logo{
+    width:40px; height:40px; border-radius:8px; background:var(--schwarz);
+    display:flex; align-items:center; justify-content:center; flex:0 0 auto;
+  }
+  .logo span{color:var(--gelb); font-weight:800; font-size:22px; line-height:1}
+  header.brand h1{font-size:20px; margin:0; font-weight:700}
+  header.brand p{margin:0; color:var(--grau); font-size:13px}
+  .card{
+    background:var(--weiss); border:1px solid var(--rand); border-radius:var(--radius);
+    padding:20px; margin-top:16px;
+  }
+  label{display:block; font-weight:600; font-size:14px; margin:0 0 6px}
+  .hint{color:var(--grau); font-weight:400; font-size:12px}
+  input[type=text],textarea,select{
+    width:100%; padding:10px 12px; border:1px solid var(--rand); border-radius:8px;
+    font-size:15px; font-family:inherit; background:var(--weiss); color:var(--schwarz);
+  }
+  input:focus,textarea:focus,select:focus{outline:2px solid var(--gelb); outline-offset:0; border-color:var(--gelb)}
+  .row{margin-bottom:16px}
+  .req::after{content:" *"; color:var(--gelb)}
+  /* Kontakt-Suche (Combo) */
+  .combo{position:relative}
+  .combo .results{
+    position:absolute; z-index:20; left:0; right:0; top:calc(100% + 4px);
+    background:var(--weiss); border:1px solid var(--rand); border-radius:8px;
+    max-height:260px; overflow:auto; box-shadow:0 6px 20px rgba(0,0,0,.08); display:none;
+  }
+  .combo .results.show{display:block}
+  .combo .results .item{padding:10px 12px; cursor:pointer; font-size:14px; border-bottom:1px solid var(--hellgrau)}
+  .combo .results .item:last-child{border-bottom:0}
+  .combo .results .item:hover,.combo .results .item.active{background:#fff8e9}
+  .combo .results .item .role{color:var(--grau); font-size:12px}
+  .combo .results .empty{padding:10px 12px; color:var(--grau); font-size:13px}
+  /* Quelle-Tabs + Worklist */
+  .tabs{display:flex; gap:6px}
+  .tab{flex:1; padding:9px 10px; border:1px solid var(--rand); border-radius:8px; background:var(--weiss); color:var(--schwarz); font-size:14px; font-weight:600; cursor:pointer}
+  .tab.active{background:var(--gelb); border-color:var(--gelb)}
+  .tab:not(.active):hover{background:#fff8e9}
+  .worklist{border:1px solid var(--rand); border-radius:8px; max-height:320px; overflow:auto; background:var(--weiss)}
+  .worklist .item{padding:10px 12px; cursor:pointer; border-bottom:1px solid var(--hellgrau)}
+  .worklist .item:last-child{border-bottom:0}
+  .worklist .item:hover{background:#fff8e9}
+  .worklist .item .nm{font-size:15px; font-weight:700}
+  .worklist .item .co{font-size:14px; font-weight:600; color:var(--schwarz); margin-top:1px}
+  .worklist .item .co.none{color:var(--grau); font-weight:400; font-style:italic}
+  .worklist .item .rl{color:var(--grau); font-size:12px}
+  .worklist .item .num{color:var(--gruen); font-size:12px}
+  .worklist .item .num.no{color:var(--rot)}
+  .worklist .item .ns{color:var(--blau); font-size:12px}
+  .worklist .empty{padding:12px; color:var(--grau); font-size:13px}
+  .wlcount{color:var(--grau); font-size:12px; margin-bottom:6px}
+  /* Kontakt-Karte */
+  .contact{display:none}
+  .contact.show{display:block}
+  .cname{font-size:18px; font-weight:700}
+  .csub{color:var(--grau); font-size:14px; margin-bottom:8px}
+  .cnext{font-size:14px; margin-bottom:14px}
+  .cnext b{color:var(--grau); font-weight:600}
+  .numbers{display:flex; flex-direction:column; gap:10px}
+  .numbtn{
+    display:flex; align-items:center; gap:12px; width:100%; padding:14px 16px;
+    border:1px solid var(--rand); border-radius:10px; background:var(--weiss);
+    font-size:16px; font-weight:600; cursor:pointer; text-align:left;
+  }
+  .numbtn:not(:disabled):hover{border-color:var(--gelb); background:#fff8e9}
+  .numbtn:disabled{opacity:.45; cursor:not-allowed}
+  .numbtn .ico{font-size:20px}
+  .numbtn .lab{display:flex; flex-direction:column; line-height:1.25}
+  .numbtn .lab .k{font-size:12px; color:var(--grau); font-weight:600}
+  .numbtn .lab .v{font-size:16px}
+  .backlink{display:inline-block; margin-top:14px; color:var(--blau); cursor:pointer; font-size:13px}
+  /* Einwilligungs-Modal */
+  .modal{position:fixed; inset:0; background:rgba(0,0,0,.42); display:none; align-items:center; justify-content:center; padding:20px; z-index:60}
+  .modal.show{display:flex}
+  .modal .box{background:var(--weiss); border-radius:12px; max-width:440px; width:100%; padding:24px}
+  .modal h2{margin:0 0 8px; font-size:18px}
+  .modal p{margin:0 0 14px; font-size:14px; color:var(--schwarz)}
+  .consent{display:flex; gap:10px; align-items:flex-start; background:#fff8e9; border:1px solid #f7d9a8; border-radius:8px; padding:12px; margin-bottom:16px; font-size:14px}
+  .consent input{margin-top:3px; flex:0 0 auto; width:18px; height:18px}
+  .modal .actions{display:flex; gap:10px}
+  /* Aufnahme-Panel */
+  .rec{display:none; text-align:center}
+  .rec.show{display:block}
+  .recdot{width:14px; height:14px; border-radius:50%; background:var(--rot); display:inline-block; margin-right:8px; animation:pulse 1.2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  .rectimer{font-size:40px; font-weight:700; font-variant-numeric:tabular-nums; margin:12px 0 4px}
+  .recwho{color:var(--grau); font-size:14px; margin-bottom:20px}
+  .recwarn{display:none; margin:0 auto 18px; max-width:440px; padding:10px 12px; background:#fdecea; border:1px solid #f5c6c2; border-radius:8px; color:var(--rot); font-size:13px}
+  .recwarn.show{display:block}
+  /* Buttons */
+  button.primary{width:100%; padding:14px; border:0; border-radius:10px; background:var(--gelb); color:var(--schwarz); font-size:16px; font-weight:700; cursor:pointer}
+  button.primary:disabled{opacity:.5; cursor:not-allowed}
+  button.primary:not(:disabled):hover{filter:brightness(.96)}
+  button.danger{width:100%; padding:14px; border:0; border-radius:10px; background:var(--rot); color:#fff; font-size:16px; font-weight:700; cursor:pointer}
+  button.danger:hover{filter:brightness(.96)}
+  button.ghost{padding:12px 16px; border:1px solid var(--rand); border-radius:10px; background:var(--weiss); color:var(--schwarz); font-size:15px; font-weight:600; cursor:pointer; flex:1}
+  /* Overlay / Fortschritt */
+  .overlay{position:fixed; inset:0; background:rgba(255,255,255,.94); display:none; align-items:center; justify-content:center; padding:24px; z-index:50}
+  .overlay.show{display:flex}
+  .prog{max-width:420px; width:100%; text-align:center}
+  .spinner{width:52px; height:52px; margin:0 auto 20px; border:5px solid var(--hellgrau); border-top-color:var(--gelb); border-radius:50%; animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .phase{font-size:16px; font-weight:600; margin-bottom:6px}
+  .phase-sub{color:var(--grau); font-size:13px}
+  .steps{list-style:none; padding:0; margin:20px 0 0; text-align:left}
+  .steps li{padding:6px 0 6px 26px; position:relative; color:var(--grau); font-size:14px}
+  .steps li::before{content:"○"; position:absolute; left:0}
+  .steps li.done{color:var(--schwarz)}
+  .steps li.done::before{content:"●"; color:var(--gruen)}
+  .steps li.active{color:var(--schwarz); font-weight:600}
+  .steps li.active::before{content:"◐"; color:var(--gelb)}
+  /* Ergebnis */
+  .result{display:none}
+  .result.show{display:block}
+  .banner{padding:14px 16px; border-radius:10px; font-weight:600; margin-bottom:16px}
+  .banner.ok{background:#eefaf0; border:1px solid #cde9d3; color:var(--gruen)}
+  .banner.err{background:#fdecea; border:1px solid #f5c6c2; color:var(--rot)}
+  .kv{margin:0 0 16px; font-size:15px}
+  .kv div{padding:4px 0}
+  .kv b{display:inline-block; min-width:120px; color:var(--grau); font-weight:600}
+  .actions{display:flex; gap:10px; margin-top:20px; flex-wrap:wrap}
+  .btn-sec{padding:11px 16px; border:1px solid var(--rand); border-radius:8px; background:var(--weiss); color:var(--schwarz); font-size:14px; font-weight:600; cursor:pointer; text-decoration:none}
+  .btn-sec.gelb{background:var(--gelb); border-color:var(--gelb)}
+  .errbox{display:none; margin-top:10px; padding:10px 12px; background:#fdecea; border:1px solid #f5c6c2; border-radius:8px; color:var(--rot); font-size:14px}
+  .errbox.show{display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="brand">
+    <div class="logo"><span>a</span></div>
+    <div>
+      <h1>Anruf protokollieren</h1>
+      <p>achermann ict-services ag · HubSpot</p>
+    </div>
+  </header>
+
+  <!-- SCHRITT 1: WER + KONTAKT -->
+  <div class="card" id="cardPick">
+    <div class="row">
+      <label for="owner" class="req">Wer bin ich</label>
+      <select id="owner" required>
+        <option value="" disabled selected>Bitte wählen …</option>
+        <!--OWNER_OPTIONS-->
+      </select>
+    </div>
+
+    <div class="row" id="sourceRow">
+      <label>Kontaktquelle</label>
+      <div class="tabs">
+        <button type="button" class="tab active" data-mode="search">Suche</button>
+        <button type="button" class="tab" data-mode="mql">MQL-Liste</button>
+        <button type="button" class="tab" data-mode="sql">SQL-Liste</button>
+      </div>
+    </div>
+
+    <div class="row" id="searchRow">
+      <label class="req">Kontakt</label>
+      <div class="combo">
+        <input type="text" id="contactSearch" placeholder="Name oder Firma suchen …" autocomplete="off">
+        <div class="results" id="contactResults"></div>
+      </div>
+      <div class="hint" style="margin-top:6px">Mindestens 2 Zeichen. Sucht Vorname, Nachname, Firma.</div>
+    </div>
+
+    <div class="row" id="worklistRow" style="display:none">
+      <div class="wlcount" id="wlCount"></div>
+      <div class="worklist" id="worklist"><div class="empty">Wird geladen …</div></div>
+    </div>
+
+    <!-- KONTAKT-KARTE MIT NUMMERN -->
+    <div class="contact" id="contactCard">
+      <div class="cname" id="cName"></div>
+      <div class="csub" id="cSub"></div>
+      <div class="cnext" id="cNext" style="display:none"></div>
+      <div class="numbers">
+        <button class="numbtn" id="btnPhone" data-kind="Festnetz">
+          <span class="ico">☎</span><span class="lab"><span class="k">Festnetz</span><span class="v" id="phoneVal">—</span></span>
+        </button>
+        <button class="numbtn" id="btnMobile" data-kind="Mobil">
+          <span class="ico">📱</span><span class="lab"><span class="k">Mobil</span><span class="v" id="mobileVal">—</span></span>
+        </button>
+      </div>
+      <span class="backlink" id="pickAnother">← anderen Kontakt wählen</span>
+      <div class="errbox" id="pickErr"></div>
+    </div>
+  </div>
+
+  <!-- AUFNAHME-PANEL -->
+  <div class="card rec" id="cardRec">
+    <div><span class="recdot"></span><span style="font-weight:700">Aufnahme läuft</span></div>
+    <div class="rectimer" id="recTimer">00:00</div>
+    <div class="recwho" id="recWho"></div>
+    <div class="recwarn" id="recWarn">Nur Mikrofon aktiv — der Systemton (Gegenseite) wird <b>nicht</b> mitaufgenommen. Bei „Bildschirm teilen" bitte „Systemaudio teilen" aktivieren.</div>
+    <button class="danger" id="btnEndCall">Anruf beendet — Aufnahme stoppen</button>
+  </div>
+
+  <!-- NACH-ANRUF: DISPOSITION + NOTIZ -->
+  <div class="card rec" id="cardPost">
+    <div style="font-weight:700; font-size:16px; margin-bottom:2px">Gespräch protokollieren</div>
+    <div class="csub" id="postWho"></div>
+    <div class="row">
+      <label for="disposition" class="req">Gesprächsergebnis</label>
+      <select id="disposition" required></select>
+    </div>
+    <div class="row">
+      <label for="sdrNote">Kurznotiz (optional)</label>
+      <textarea id="sdrNote" rows="3" placeholder="Stichworte, die die KI-Zusammenfassung ergänzen …"></textarea>
+    </div>
+    <div class="errbox" id="postErr"></div>
+    <button class="primary" id="btnSubmit">Nach HubSpot übertragen</button>
+  </div>
+
+  <!-- ERGEBNIS -->
+  <div class="card result" id="result">
+    <div class="banner ok" id="resultBanner">Der Anruf wurde in HubSpot protokolliert.</div>
+    <div class="kv" id="resultKv"></div>
+    <div class="actions">
+      <a class="btn-sec gelb" id="contactLink" target="_blank" rel="noopener">Kontakt in HubSpot öffnen</a>
+      <button class="btn-sec" id="again">Nächsten Anruf erfassen</button>
+    </div>
+  </div>
+</div>
+
+<!-- EINWILLIGUNGS-MODAL -->
+<div class="modal" id="consentModal">
+  <div class="box">
+    <h2>Anruf starten &amp; aufnehmen</h2>
+    <p id="consentWho"></p>
+    <div class="consent">
+      <input type="checkbox" id="consentChk">
+      <label for="consentChk" style="font-weight:500; margin:0">Ich informiere die Gegenseite zu Gesprächsbeginn, dass der Anruf aufgezeichnet wird (gesetzlich erforderlich, Art. 179ter StGB).</label>
+    </div>
+    <p class="hint">Beim Start fragt der Browser nach Mikrofon und Bildschirm-/Systemton. Bitte <b>„Gesamter Bildschirm"</b> wählen und <b>„Systemaudio teilen"</b> aktivieren, damit die Gegenseite mitaufgenommen wird.</p>
+    <div class="actions">
+      <button class="ghost" id="consentCancel">Abbrechen</button>
+      <button class="primary" id="consentStart" style="flex:1" disabled>Anruf starten</button>
+    </div>
+  </div>
+</div>
+
+<!-- OVERLAY -->
+<div class="overlay" id="overlay">
+  <div class="prog">
+    <div class="spinner"></div>
+    <div class="phase" id="phaseText">Wird verarbeitet …</div>
+    <div class="phase-sub">Das dauert bis zu zwei Minuten. Bitte den Tab offen lassen.</div>
+    <ul class="steps">
+      <li id="st-up">Aufnahme übertragen</li>
+      <li id="st-tr">Transkribieren</li>
+      <li id="st-ai">Analysieren</li>
+      <li id="st-hs">In HubSpot schreiben</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var CFG = {
+    base:    "https://n8n.srv795144.hstgr.cloud/webhook",
+    owners:  "call-owners",
+    search:  "call-contact-search",
+    worklist:"call-worklist",
+    submit:  "call-submit",
+    header:  "x-sdr-token",
+    portalId:"146876874"
+  };
+  // Zugriffsschluessel aus der Link-URL (?k=...) — dient als API-Token.
+  var TOKEN = (function(){ var m = String(location.search || "").match(/[?&]k=([^&]+)/); return m ? decodeURIComponent(m[1]) : ""; })();
+  var DISPOSITIONS = [
+    { value:"f240bbac-87c9-4f6e-bf70-924b57d47db7", label:"Kontakt aufgenommen" },
+    { value:"73a0d17f-1163-4015-bdd5-ec830791da20", label:"Keine Antwort" },
+    { value:"b2cf5968-551e-4856-9783-52b3da59a7d0", label:"Voicemail hinterlassen" },
+    { value:"a4c4c377-d246-4b32-a13b-75a56a4cd0ff", label:"Live-Nachricht hinterlassen" },
+    { value:"9d9162e7-6cf3-4944-bf63-4dff82258764", label:"Besetzt" },
+    { value:"17b47fee-58de-441e-a44c-c6300d46f273", label:"Falsche Nummer" }
+  ];
+  var $ = function(id){ return document.getElementById(id); };
+  function authHeaders(){ var h={}; if(TOKEN){ h[CFG.header]=TOKEN; } return h; }
+  function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+  function telify(n){ n=String(n||""); var plus=n.trim().charAt(0)==="+"; var d=n.replace(/[^0-9]/g,""); return (plus?"+":"")+d; }
+
+  // ---------- Dispositions befüllen ----------
+  (function(){
+    var sel=$("disposition");
+    DISPOSITIONS.forEach(function(d,i){
+      var o=document.createElement("option"); o.value=d.value; o.textContent=d.label;
+      if(d.label==="Kontakt aufgenommen") o.selected=true;
+      sel.appendChild(o);
+    });
+  })();
+
+  // ---------- Zugriff prüfen + Owner laden ----------
+  function showAccessError(msg){
+    $("cardPick").style.display="none";
+    var d=document.createElement("div"); d.className="card";
+    d.innerHTML='<div class="banner err">'+esc(msg)+'</div><div class="hint">Bitte den vollständigen Link mit Zugriffsschlüssel öffnen (…?k=…).</div>';
+    document.querySelector(".wrap").appendChild(d);
+  }
+  (function initOwners(){
+    if(!TOKEN){ showAccessError("Kein Zugriffsschlüssel im Link."); return; }
+    var sel=$("owner");
+    fetch(CFG.base+"/"+CFG.owners, { headers: authHeaders() })
+      .then(function(r){ if(r.status===401||r.status===403){ throw new Error("unauth"); } return r.json(); })
+      .then(function(list){
+        if(!Array.isArray(list)) list=[];
+        list.forEach(function(o){ var op=document.createElement("option"); op.value=String(o.id); op.textContent=o.name; sel.appendChild(op); });
+      })
+      .catch(function(){ showAccessError("Kein Zugriff — Link oder Schlüssel ungültig."); });
+  })();
+
+  // ---------- Kontakt-Suche ----------
+  var contact=null, dbTimer=null;
+  var cs=$("contactSearch"), cr=$("contactResults");
+  cs.addEventListener("input", function(){
+    clearTimeout(dbTimer); var q=cs.value.trim();
+    if(q.length<2){ cr.classList.remove("show"); cr.innerHTML=""; return; }
+    dbTimer=setTimeout(function(){ runContactSearch(q); }, 280);
+  });
+  document.addEventListener("click", function(e){ if(!e.target.closest(".combo")){ cr.classList.remove("show"); } });
+  function runContactSearch(q){
+    cr.innerHTML='<div class="empty">Suche …</div>'; cr.classList.add("show");
+    fetch(CFG.base+"/"+CFG.search+"?q="+encodeURIComponent(q), { headers: authHeaders() })
+      .then(function(r){ return r.json(); })
+      .then(function(list){
+        if(!Array.isArray(list) || !list.length){ cr.innerHTML='<div class="empty">Kein Kontakt gefunden.</div>'; return; }
+        cr.innerHTML="";
+        list.forEach(function(c){
+          var el=document.createElement("div"); el.className="item";
+          var sub=[c.company, c.jobtitle].filter(Boolean).join(" · ");
+          el.innerHTML='<div>'+esc(c.name||"(ohne Name)")+'</div>'+(sub?'<div class="role">'+esc(sub)+'</div>':'');
+          el.addEventListener("click", function(){ pickContact(c); });
+          cr.appendChild(el);
+        });
+      })
+      .catch(function(){ cr.innerHTML='<div class="empty">Suche momentan nicht möglich.</div>'; });
+  }
+  function pickContact(c){
+    if(!$("owner").value){ cs.value=""; cr.classList.remove("show"); alert("Bitte zuerst oben auswählen, wer du bist."); return; }
+    contact=c;
+    $("cName").textContent=c.name||("#"+c.id);
+    $("cSub").textContent=[c.company,c.jobtitle].filter(Boolean).join(" · ")||"";
+    var cn=$("cNext");
+    if(c.nextstep){ cn.style.display=""; cn.innerHTML="<b>Next Step:</b> "+esc(c.nextstep); }
+    else { cn.style.display="none"; cn.innerHTML=""; }
+    setupNumBtn($("btnPhone"), $("phoneVal"), c.phone, "Festnetz");
+    setupNumBtn($("btnMobile"), $("mobileVal"), c.mobile, "Mobil");
+    cr.classList.remove("show"); cs.value="";
+    hidePicker();
+    $("contactCard").classList.add("show");
+  }
+  function setupNumBtn(btn, valEl, num, kind){
+    if(num){ btn.disabled=false; valEl.textContent=num; btn.dataset.num=num; }
+    else { btn.disabled=true; valEl.textContent="keine Nummer hinterlegt"; btn.dataset.num=""; }
+  }
+  $("btnPhone").addEventListener("click", function(){ askConsent(this.dataset.num, "Festnetz"); });
+  $("btnMobile").addEventListener("click", function(){ askConsent(this.dataset.num, "Mobil"); });
+  $("pickAnother").addEventListener("click", function(){
+    contact=null; $("contactCard").classList.remove("show"); showPicker();
+  });
+
+  // ---------- Kontaktquelle: Tabs + Worklist ----------
+  var mode = "search";
+  function showPicker(){
+    $("sourceRow").style.display="";
+    if(mode==="search"){ $("searchRow").style.display=""; $("worklistRow").style.display="none"; cs.focus(); }
+    else { $("searchRow").style.display="none"; $("worklistRow").style.display=""; }
+  }
+  function hidePicker(){
+    $("sourceRow").style.display="none"; $("searchRow").style.display="none"; $("worklistRow").style.display="none";
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".tab"), function(t){
+    t.addEventListener("click", function(){
+      Array.prototype.forEach.call(document.querySelectorAll(".tab"), function(x){ x.classList.remove("active"); });
+      t.classList.add("active");
+      mode = t.dataset.mode;
+      if(mode==="search"){ $("searchRow").style.display=""; $("worklistRow").style.display="none"; cs.focus(); }
+      else { $("searchRow").style.display="none"; $("worklistRow").style.display=""; loadWorklist(mode); }
+    });
+  });
+  function loadWorklist(type){
+    var wl=$("worklist"), wc=$("wlCount");
+    var owner=$("owner").value;
+    if(!owner){ wl.innerHTML='<div class="empty">Bitte zuerst oben «Wer bin ich» wählen.</div>'; wc.textContent=""; return; }
+    wl.innerHTML='<div class="empty">Wird geladen …</div>'; wc.textContent="";
+    fetch(CFG.base+"/"+CFG.worklist+"?type="+encodeURIComponent(type)+"&owner="+encodeURIComponent(owner), { headers: authHeaders() })
+      .then(function(r){ return r.json(); })
+      .then(function(list){
+        if(!Array.isArray(list) || !list.length){ wl.innerHTML='<div class="empty">Keine Kontakte in dieser Liste für die gewählte Person.</div>'; return; }
+        wc.textContent=list.length+" Kontakte"+(list.length>=100?" (max. 100 angezeigt)":"");
+        wl.innerHTML="";
+        list.forEach(function(c){
+          var el=document.createElement("div"); el.className="item";
+          var co = c.company ? '<div class="co">'+esc(c.company)+'</div>' : '<div class="co none">Firma unbekannt</div>';
+          var jt = c.jobtitle ? '<div class="rl">'+esc(c.jobtitle)+'</div>' : '';
+          var ns = c.nextstep ? '<div class="ns">Next Step: '+esc(c.nextstep)+'</div>' : '';
+          var hasNum=(c.phone||c.mobile);
+          var numTxt = hasNum ? [(c.phone?"Festnetz":""),(c.mobile?"Mobil":"")].filter(Boolean).join(" · ") : "keine Nummer hinterlegt";
+          el.innerHTML='<div class="nm">'+esc(c.name)+'</div>'+co+jt+ns+'<div class="num'+(hasNum?'':' no')+'">'+esc(numTxt)+'</div>';
+          el.addEventListener("click", function(){ pickContact(c); });
+          wl.appendChild(el);
+        });
+      })
+      .catch(function(){ wl.innerHTML='<div class="empty">Liste momentan nicht ladbar.</div>'; });
+  }
+  // Owner-Wechsel: aktive Worklist neu laden (owner-gefiltert)
+  $("owner").addEventListener("change", function(){ if(mode==="mql"||mode==="sql"){ loadWorklist(mode); } });
+
+  // ---------- Einwilligung ----------
+  var dialNumber=null, dialKind="";
+  function askConsent(num, kind){
+    if(!num) return;
+    dialNumber=num; dialKind=kind;
+    $("consentWho").innerHTML="Du rufst <b>"+esc(contact.name)+"</b> auf der <b>"+esc(kind)+"nummer "+esc(num)+"</b> an.";
+    $("consentChk").checked=false; $("consentStart").disabled=true;
+    $("consentModal").classList.add("show");
+  }
+  $("consentChk").addEventListener("change", function(){ $("consentStart").disabled=!this.checked; });
+  $("consentCancel").addEventListener("click", function(){ $("consentModal").classList.remove("show"); });
+  $("consentStart").addEventListener("click", function(){
+    if(!$("consentChk").checked) return;
+    $("consentModal").classList.remove("show");
+    startCallAndRecord();
+  });
+
+  // ---------- Aufnahme (Mikro + Systemton) ----------
+  var mediaRec=null, chunks=[], recBlob=null, startMs=0, endMs=0, timerInt=null;
+  var micStream=null, sysStream=null, audioCtx=null;
+  function fmtTimer(ms){ var s=Math.floor(ms/1000); var m=Math.floor(s/60); s=s%60; return (m<10?"0":"")+m+":"+(s<10?"0":"")+s; }
+
+  function startCallAndRecord(){
+    $("recWarn").classList.remove("show");
+    // 1) Systemton via Display-Capture ZUERST (braucht frische Nutzer-Geste)
+    navigator.mediaDevices.getDisplayMedia({ video:true, audio:true })
+      .then(function(sys){ sysStream=sys; }, function(){ sysStream=null; /* Nutzer bricht Systemton ab → nur Mikro */ })
+      .then(function(){
+        // 2) Mikrofon
+        return navigator.mediaDevices.getUserMedia({ audio:true, video:false });
+      })
+      .then(function(mic){
+        micStream=mic;
+        // Video-Tracks des Displays verwerfen (nur Ton wird gebraucht)
+        if(sysStream){ sysStream.getVideoTracks().forEach(function(t){ t.stop(); }); }
+        var hasSys = sysStream && sysStream.getAudioTracks().length>0;
+        if(!hasSys){ $("recWarn").classList.add("show"); }
+        // Audio mischen
+        var AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC();
+        var dest = audioCtx.createMediaStreamDestination();
+        audioCtx.createMediaStreamSource(micStream).connect(dest);
+        if(hasSys){ audioCtx.createMediaStreamSource(sysStream).connect(dest); }
+        var mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+        mediaRec = new MediaRecorder(dest.stream, { mimeType:mime });
+        chunks=[];
+        mediaRec.ondataavailable=function(e){ if(e.data && e.data.size) chunks.push(e.data); };
+        mediaRec.onstop=function(){ recBlob=new Blob(chunks, {type:mime}); afterCall(); };
+        mediaRec.start();
+        startMs=Date.now();
+        // 3) Anruf über Teams starten
+        window.location.href = "tel:"+telify(dialNumber);
+        // 4) Aufnahme-Panel
+        $("cardPick").style.display="none";
+        $("recWho").textContent = contact.name+" · "+dialKind+" "+dialNumber;
+        $("recTimer").textContent="00:00";
+        $("cardRec").classList.add("show");
+        timerInt=setInterval(function(){ $("recTimer").textContent=fmtTimer(Date.now()-startMs); }, 500);
+      })
+      .catch(function(err){
+        stopAllTracks();
+        alert("Mikrofon-Zugriff nötig, um den Anruf aufzunehmen. ("+(err && err.name||"Fehler")+")");
+      });
+  }
+  function stopAllTracks(){
+    if(micStream) micStream.getTracks().forEach(function(t){ t.stop(); });
+    if(sysStream) sysStream.getTracks().forEach(function(t){ t.stop(); });
+    if(audioCtx && audioCtx.state!=="closed"){ try{ audioCtx.close(); }catch(e){} }
+  }
+  $("btnEndCall").addEventListener("click", function(){
+    endMs=Date.now(); clearInterval(timerInt);
+    if(mediaRec && mediaRec.state!=="inactive"){ mediaRec.stop(); } else { afterCall(); }
+    stopAllTracks();
+  });
+  function afterCall(){
+    $("cardRec").classList.remove("show");
+    var durMs=(endMs||Date.now())-startMs;
+    $("postWho").textContent = contact.name+" · "+dialKind+" "+dialNumber+" · Dauer "+fmtTimer(durMs);
+    $("cardPost").classList.add("show");
+    window.scrollTo(0,0);
+  }
+
+  // ---------- Absenden ----------
+  $("btnSubmit").addEventListener("click", function(){
+    $("postErr").classList.remove("show");
+    var disp=$("disposition").value;
+    if(!disp){ return showErr("postErr","Bitte ein Gesprächsergebnis wählen."); }
+    if(!recBlob || !recBlob.size){ return showErr("postErr","Keine Aufnahme vorhanden."); }
+    var durMs=(endMs||Date.now())-startMs;
+
+    var fd=new FormData();
+    fd.append("File", recBlob, "anruf.webm");
+    fd.append("contactId", String(contact.id));
+    fd.append("selectedOwnerId", $("owner").value);
+    fd.append("toNumber", dialNumber);
+    fd.append("direction", "OUTBOUND");
+    fd.append("disposition", disp);
+    fd.append("dispositionLabel", $("disposition").selectedOptions[0].textContent);
+    fd.append("startTimeMs", String(startMs));
+    fd.append("durationMs", String(durMs));
+    fd.append("sdrNote", $("sdrNote").value.trim());
+    fd.append("consent", "true");
+    fd.append("contactName", contact.name||"");
+
+    startProgress();
+    fetch(CFG.base+"/"+CFG.submit, { method:"POST", body:fd, headers: authHeaders() })
+      .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+      .then(function(res){ stopProgress(); if(res.ok && res.j && res.j.status!=="error"){ showResult(res.j); } else { showResultError(res.j); } })
+      .catch(function(){ stopProgress(); showResultError({message:"Verbindung unterbrochen oder Zeitüberschreitung. Bitte in HubSpot prüfen, ob der Anruf trotzdem protokolliert wurde."}); });
+  });
+  function showErr(id,m){ var e=$(id); e.textContent=m; e.classList.add("show"); }
+
+  // ---------- Fortschritt ----------
+  var progTimer=null;
+  function startProgress(){
+    $("btnSubmit").disabled=true; $("overlay").classList.add("show");
+    var steps=["st-up","st-tr","st-ai","st-hs"];
+    var labels=["Aufnahme wird übertragen …","Transkription läuft …","Analyse durch KI …","Schreibe in HubSpot …"];
+    var i=0; setStep(steps,i); $("phaseText").textContent=labels[0];
+    var delays=[2500,8000,7000];
+    function next(){ if(i<3){ i++; setStep(steps,i); $("phaseText").textContent=labels[i]; if(i<3){ progTimer=setTimeout(next, delays[i]); } } }
+    progTimer=setTimeout(next, delays[0]);
+  }
+  function setStep(steps,active){ steps.forEach(function(id,idx){ var el=$(id); el.className = idx<active?"done":(idx===active?"active":""); }); }
+  function stopProgress(){ clearTimeout(progTimer); $("overlay").classList.remove("show"); $("btnSubmit").disabled=false; }
+
+  // ---------- Ergebnis ----------
+  function showResult(j){
+    $("cardPost").classList.remove("show");
+    $("resultBanner").className="banner ok";
+    $("resultBanner").textContent="Der Anruf wurde in HubSpot protokolliert.";
+    var kv=$("resultKv"); kv.innerHTML="";
+    addKv(kv,"Kontakt", (contact&&contact.name)||"");
+    addKv(kv,"Ergebnis", j.dispositionLabel || $("disposition").selectedOptions[0].textContent);
+    if(j.title){ addKv(kv,"Betreff", j.title); }
+    var url = j.contactUrl || ("https://app-eu1.hubspot.com/contacts/"+CFG.portalId+"/record/0-1/"+encodeURIComponent((contact&&contact.id)||""));
+    $("contactLink").href=url;
+    $("result").classList.add("show"); window.scrollTo(0,0);
+  }
+  function showResultError(j){
+    $("cardPost").classList.remove("show");
+    $("resultBanner").className="banner err";
+    $("resultBanner").textContent="Es gab ein Problem bei der Verarbeitung.";
+    $("resultKv").innerHTML="<div>"+esc((j&&j.message)||"Unbekannter Fehler.")+"</div>";
+    $("contactLink").style.display="none";
+    $("result").classList.add("show"); window.scrollTo(0,0);
+  }
+  $("again").addEventListener("click", function(){ location.reload(); });
+  function addKv(box,k,v){ var d=document.createElement("div"); d.innerHTML="<b>"+esc(k)+"</b> "+esc(v); box.appendChild(d); }
+})();
+</script>
+</body>
+</html>
